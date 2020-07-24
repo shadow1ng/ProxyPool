@@ -97,7 +97,7 @@ def communicate(sock1, sock2):
     try:
         while 1:
             data = sock1.recv(1024)
-            print(data.decode('utf-8'))
+            #print(data.decode('utf-8'))
             # print(data)
             if not data:
                 return
