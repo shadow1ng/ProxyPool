@@ -24,7 +24,7 @@ class Detect(threading.Thread):
 
     def check(self, pool):
         checkurl = "http://httpbin.org/ip"
-        # checkurl = "http://www.baidu.com"
+        checkurl1 = "http://www.baidu.com"
         proxies = {'http': "socks5://"+pool,'https': "socks5://"+pool}
         headers = {
                     'Connection': 'close',
@@ -35,17 +35,16 @@ class Detect(threading.Thread):
                 }
         try:
             req = requests.get(checkurl,headers=headers,proxies=proxies,timeout=3,verify=False)
-            print(pool)
-            print(req.text)
-            self.save_live(pool)
-            self.vul_list.append(pool)
+            req1 = requests.get(checkurl1,headers=headers,proxies=proxies,timeout=3,verify=False)
+            if req.status_code == 200 and req1.status_code == 200:
+                print(pool)
+                print(req.text)
+                # print(req1.text)
+                self.vul_list.append(pool)
         except:
             pass
     
-    def save_live(self,pool):
-        f = open("alive.txt","a+")
-        f.write(pool+"\n")
-        f.close()
+    
 
 def get_pool(check_queue,check_file):
     fhttp = open(check_file,"r")
@@ -57,19 +56,12 @@ def get_pool(check_queue,check_file):
     for one in HttpPool:
         check_queue.put(one)
 
-def quchong():
-    flive = open("alive.txt","r")
-    test=set()
-    for one in flive:
-        test.add(one.strip())
-    test = list(test)
-    flive.close()
-
+def quchong(vul_list):
+    vul_list=list(set(vul_list))
     flive = open("alive.txt","w")
-    for one in test:
+    for one in vul_list:
         flive.write(one+"\n")
     flive.close()
-        
 
 
 if __name__ == '__main__':
@@ -89,5 +81,6 @@ if __name__ == '__main__':
         t.start()
     for t in threads:
         t.join()
-    quchong()
+    quchong(vul_list)
     print(vul_list)
+    print("代理存活数量: ",len(vul_list))
