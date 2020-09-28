@@ -25,7 +25,9 @@ class Detect(threading.Thread):
     def check(self, pool):
         checkurl = "http://httpbin.org/ip"
         checkurl1 = "http://www.baidu.com"
+        checkurl = "http://myip.ipip.net/"
         proxies = {'http': "socks5://"+pool,'https': "socks5://"+pool}
+        # proxies = {'http': pool,'https': pool}
         headers = {
                     'Connection': 'close',
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/57.0.2987.110 Safari/537.36',
@@ -34,17 +36,39 @@ class Detect(threading.Thread):
                     'Accept-Language': 'zh-CN,zh;q=0.8',
                 }
         try:
-            req = requests.get(checkurl,headers=headers,proxies=proxies,timeout=3,verify=False)
+            # req = requests.get(checkurl,headers=headers,proxies=proxies,timeout=3,verify=False)
             req1 = requests.get(checkurl1,headers=headers,proxies=proxies,timeout=3,verify=False)
-            if req.status_code == 200 and req1.status_code == 200:
+            # print(req.text)
+            # if req.status_code == 200 and req1.status_code == 200:
+            if req1.status_code == 200:
                 print(pool)
-                print(req.text)
-                # print(req1.text)
                 self.vul_list.append(pool)
-        except:
+        except Exception as e:
+            print(e)
             pass
+
+        if 1:
+            try:
+                # req = requests.get(checkurl,headers=headers,proxies=proxies,timeout=3,verify=False)
+                req1 = requests.get(checkurl,headers=headers,proxies=proxies,timeout=3,verify=False)
+                # print(req.text)
+                # if req.status_code == 200 and req1.status_code == 200:
+                if req1.status_code == 200:
+                    print(pool)
+                    # print(req1.text)
+                    self.vul_list.append(pool)
+            except Exception as e:
+                # print(e)
+                pass
     
-    
+def quchong(vul_list):
+    vul_list=list(set(vul_list))
+    print(vul_list)
+    print("代理存活数量: ",len(vul_list))
+    flive = open("testalive.txt","w")
+    for one in vul_list:
+        flive.write(one+"\n")
+    flive.close()
 
 def get_pool(check_queue,check_file):
     fhttp = open(check_file,"r")
@@ -53,16 +77,12 @@ def get_pool(check_queue,check_file):
         HttpPool.add(one.strip())
     HttpPool = list(HttpPool)
     fhttp.close()
+
+    quc = open(check_file,"w")
     for one in HttpPool:
+        quc.write(one+"\n")
         check_queue.put(one)
-
-def quchong(vul_list):
-    vul_list=list(set(vul_list))
-    flive = open("alive.txt","w")
-    for one in vul_list:
-        flive.write(one+"\n")
-    flive.close()
-
+    quc.close()
 
 if __name__ == '__main__':
     from queue import Queue
@@ -71,7 +91,6 @@ if __name__ == '__main__':
     check_queue = Queue() 
     check_file = "socks.txt"
     get_pool(check_queue,check_file)
- 
     threads = []
     thread_num = 100  # 漏洞检测的线程数目
 
@@ -82,5 +101,4 @@ if __name__ == '__main__':
     for t in threads:
         t.join()
     quchong(vul_list)
-    print(vul_list)
-    print("代理存活数量: ",len(vul_list))
+    
