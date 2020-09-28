@@ -65,7 +65,7 @@ def quchong(vul_list):
     vul_list=list(set(vul_list))
     print(vul_list)
     print("代理存活数量: ",len(vul_list))
-    flive = open("testalive.txt","w")
+    flive = open("alive.txt","w")
     for one in vul_list:
         flive.write(one+"\n")
     flive.close()
