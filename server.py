@@ -97,7 +97,7 @@ def communicate(sock1, sock2):
     try:
         while 1:
             data = sock1.recv(1024)
-            #print(data.decode('utf-8'))
+            # print(data.decode('utf-8'))
             # print(data)
             if not data:
                 return
@@ -119,8 +119,10 @@ def handle(client):
     if not header.data:
         client.close()
         return
-    print("==========>>>>>>>>> ",*header.get_host_info(), header.get_method().decode('utf-8'))
-    print(header.data)
+    print("==========>>>>>>>>> ",header.get_host_info()[0],header.get_host_info()[1], header.get_method().decode('utf-8'))
+    # print(header._header.decode("utf8"))
+
+    # print(header.data)
 
     flag = 1
     while flag:
@@ -161,7 +163,7 @@ def serve(ip, port):
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((ip, port))
     s.listen(100)
-    print('proxy start...')
+    print('proxy start...',port)
     while True:
         conn, addr = s.accept()
         if conn:
