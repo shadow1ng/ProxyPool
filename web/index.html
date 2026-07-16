@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProxyPool 控制台</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #0f1419; color: #c9d1d9; padding: 16px; min-height: 100vh; }
+  .wrap { max-width: 1000px; margin: 0 auto; }
+  h2.section { font-size: 13px; color: #8b949e; font-weight: 600; margin: 14px 2px 8px; text-transform: uppercase; letter-spacing: .5px; }
+
+  /* 通用卡片 */
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; }
+  .card.row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+
+  /* 顶栏 */
+  .topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .topbar h1 { font-size: 17px; color: #58a6ff; font-weight: 600; }
+  .topbar h1 small { color: #6e7681; font-weight: 400; font-size: 12px; margin-left: 6px; }
+
+  /* 表单元素 */
+  label.fld { display: inline-flex; flex-direction: column; font-size: 11px; color: #8b949e; gap: 3px; }
+  input[type=text], input[type=number], select {
+    background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 5px;
+    padding: 5px 8px; font-size: 13px; width: 110px;
+  }
+  input[type=text].wide, input[type=number].wide { width: 240px; }
+  input:focus, select:focus { outline: none; border-color: #58a6ff; }
+
+  /* 按钮 */
+  .btn { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer; font-weight: 500; transition: background .15s; }
+  .btn:hover { background: #2ea043; }
+  .btn:disabled { background: #21262d; color: #6e7681; cursor: not-allowed; }
+  .btn.secondary { background: #30363d; }
+  .btn.secondary:hover { background: #3d444d; }
+  .btn.warn { background: #9e6a03; }
+  .btn.warn:hover { background: #bb8009; }
+  .btn.blue { background: #1f6feb; }
+  .btn.blue:hover { background: #388bfd; }
+  .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* 当前出口大字 */
+  .current-ip { font-family: "Cascadia Code", Consolas, monospace; font-size: 17px; color: #3fb950; font-weight: 700; }
+  .current-ip.none { color: #6e7681; font-weight: 400; }
+
+  /* 统计卡片网格 */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 8px; }
+  .stat { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 10px; text-align: center; }
+  .stat .n { font-size: 20px; font-weight: 700; color: #58a6ff; font-family: monospace; }
+  .stat .n.good { color: #3fb950; }
+  .stat .n.bad { color: #f85149; }
+  .stat .t { font-size: 11px; color: #8b949e; margin-top: 3px; }
+
+  /* 任务状态条 */
+  .task { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+  .task .dot { width: 8px; height: 8px; border-radius: 50%; background: #6e7681; }
+  .task .dot.run { background: #d29922; animation: pulse 1s infinite; }
+  .task .dot.done { background: #3fb950; }
+  .task .dot.err { background: #f85149; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* 日志 */
+  .log-box { background: #0d1117; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+  .log-head { display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; background: #161b22; border-bottom: 1px solid #30363d; }
+  .log-head h2 { font-size: 13px; }
+  .log-controls { display: flex; gap: 10px; align-items: center; font-size: 12px; color: #8b949e; }
+  #logs { height: 300px; overflow-y: auto; padding: 8px 14px; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; line-height: 1.65; }
+  .lvl-INFO { color: #8b949e; }
+  .lvl-WARN { color: #d29922; }
+  .lvl-ERROR { color: #f85149; }
+  .seq { color: #484f58; margin-right: 6px; }
+  #logs::-webkit-scrollbar { width: 8px; }
+  #logs::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+  /* toast */
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); background: #238636; color: #fff; padding: 9px 20px; border-radius: 6px; font-size: 13px; opacity: 0; transition: all .25s; pointer-events: none; z-index: 99; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { background: #da3633; }
+  .hint { color: #6e7681; font-size: 11px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <!-- 顶栏 -->
+  <div class="card topbar">
+    <h1>ProxyPool 控制台 <small id="meta">—</small></h1>
+    <div class="btn-group">
+      <button class="btn blue" id="fetchBtn">⬇ 抓取代理</button>
+      <button class="btn blue" id="checkBtn">✓ 检测存活</button>
+      <button class="btn warn" id="rotateBtn">🔄 换 IP</button>
+      <button class="btn secondary" id="resetBtn">重置熔断</button>
+      <a class="btn secondary" href="/pool.html" style="text-decoration:none;">📋 代理池管理</a>
+    </div>
+  </div>
+
+  <!-- 当前出口 + 模式 -->
+  <div class="card row">
+    <div>
+      <div style="font-size:11px;color:#8b949e;">当前出口 IP</div>
+      <span class="current-ip none" id="current">未使用</span>
+    </div>
+    <label class="fld">
+      代理模式
+      <select id="mode" title="auto=每次随机换 | sticky=优先同IP | manual=锁定手动换">
+        <option value="auto">auto 每次自动切换</option>
+        <option value="sticky">sticky 优先同一IP</option>
+        <option value="manual">manual 手动锁定</option>
+      </select>
+    </label>
+    <label class="fld">
+      地区筛选
+      <select id="regionFilter" title="限制只用某地区的代理">
+        <option value="ALL">全部</option>
+        <option value="CN">仅中国</option>
+        <option value="OTHER">仅其他</option>
+      </select>
+    </label>
+    <span class="hint" id="taskInfo"></span>
+  </div>
+
+  <!-- 统计 -->
+  <h2 class="section">运行状态</h2>
+  <div class="card"><div class="stats-grid" id="stats"></div></div>
+
+  <!-- 运行配置 -->
+  <h2 class="section">运行配置 <span style="text-transform:none;font-weight:400;color:#6e7681">（改端口/上游会自动重启监听）</span></h2>
+  <div class="card">
+    <div class="row" style="display:flex;gap:14px;flex-wrap:wrap;">
+      <label class="fld">监听地址<input type="text" id="cfg_listen"></label>
+      <label class="fld">代理端口<input type="number" id="cfg_port"></label>
+      <label class="fld">控制台端口<input type="number" id="cfg_stats_port"></label>
+      <label class="fld">上游类型
+        <select id="cfg_upstream_type">
+          <option value="socks5">socks5</option>
+          <option value="socks4">socks4</option>
+          <option value="http">http</option>
+        </select>
+      </label>
+      <label class="fld">最大并发<input type="number" id="cfg_max_clients"></label>
+      <label class="fld">熔断阈值<input type="number" id="cfg_fail_threshold"></label>
+      <label class="fld">连接超时(秒)<input type="number" id="cfg_timeout"></label>
+      <label class="fld">重试次数<input type="number" id="cfg_retries"></label>
+      <label class="fld">检测线程数<input type="number" id="cfg_threads"></label>
+    </div>
+    <div class="row" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;align-items:flex-end;">
+      <label class="fld">抓取用的代理（留空直连，可下拉选或手动改）
+        <input type="text" class="wide" id="cfg_fetch_proxy" list="fetch_proxy_presets" placeholder="socks5://127.0.0.1:1080">
+      </label>
+      <datalist id="fetch_proxy_presets">
+        <option value="socks5://127.0.0.1:1080">常用 SOCKS5</option>
+        <option value="socks5://127.0.0.1:7890">Clash SOCKS5</option>
+        <option value="http://127.0.0.1:8080">HTTP 代理</option>
+        <option value="http://127.0.0.1:7890">Clash HTTP</option>
+        <option value="">留空 = 直连</option>
+      </datalist>
+      <button class="btn" id="saveCfg">💾 保存并应用</button>
+    </div>
+  </div>
+
+  <!-- 日志 -->
+  <h2 class="section">实时日志</h2>
+  <div class="log-box">
+    <div class="log-head">
+      <h2>事件流</h2>
+      <div class="log-controls">
+        <label><input type="checkbox" id="autoscroll" checked> 自动滚动</label>
+        <button class="btn secondary" id="clearLogs">清空</button>
+      </div>
+    </div>
+    <div id="logs"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let lastSeq = 0;
+let cfgLoaded = false;
+
+// ---- toast ----
+let toastTimer;
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 2200);
+}
+
+// ---- 请求封装 ----
+async function post(path, body) {
+  try {
+    const r = await fetch(path, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {}) });
+    return await r.json();
+  } catch (e) { toast('请求失败: ' + e.message, true); return null; }
+}
+async function put(path, body) {
+  try {
+    const r = await fetch(path, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body || {}) });
+    return await r.json();
+  } catch (e) { toast('请求失败: ' + e.message, true); return null; }
+}
+
+// ---- 操作按钮 ----
+$('mode').addEventListener('change', async (e) => {
+  const d = await post('/mode', {mode: e.target.value});
+  if (d && !d.error) { toast('已切换为 ' + e.target.value + ' 模式'); refreshStats(d); }
+  else if (d) toast(d.error || '切换失败', true);
+});
+
+$('regionFilter').addEventListener('change', async (e) => {
+  const d = await post('/region', {country: e.target.value});
+  if (d && !d.error) { toast('地区筛选: ' + e.target.options[e.target.selectedIndex].text); refreshStats(d); }
+  else if (d) toast(d.error || '筛选失败', true);
+});
+
+$('rotateBtn').addEventListener('click', async () => {
+  $('rotateBtn').disabled = true;
+  const d = await post('/rotate', {});
+  $('rotateBtn').disabled = false;
+  if (d && !d.error) { toast('已换到 ' + (d.current || '新IP')); refreshStats(d); }
+  else if (d) toast(d.error || '换IP失败', true);
+});
+
+$('fetchBtn').addEventListener('click', async () => {
+  // 保存当前 fetch_proxy 到配置再触发（保证用最新输入）
+  const proxy = $('cfg_fetch_proxy').value.trim();
+  await put('/config', {fetch_proxy: proxy});
+  const d = await post('/fetch', {proxy: proxy || null});
+  if (d && !d.error) toast('开始抓取代理，看日志了解进度');
+  else if (d) toast(d.error || '启动失败', true);
+});
+
+$('checkBtn').addEventListener('click', async () => {
+  const d = await post('/check', {});
+  if (d && !d.error) toast('开始检测存活，看日志了解进度');
+  else if (d) toast(d.error || '启动失败', true);
+});
+
+$('resetBtn').addEventListener('click', async () => {
+  const d = await post('/reset', {});  // /reset 实为 GET，兼容用 fetch
+  toast('已重置熔断');
+});
+
+// 真正的 /reset 是 GET，单独处理
+$('resetBtn').onclick = async () => {
+  try { await fetch('/reset'); toast('已重置熔断状态'); } catch(e) {}
+};
+
+// ---- 保存配置 ----
+$('saveCfg').addEventListener('click', async () => {
+  const cfg = {
+    listen: $('cfg_listen').value.trim(),
+    port: parseInt($('cfg_port').value),
+    stats_port: parseInt($('cfg_stats_port').value),
+    upstream_type: $('cfg_upstream_type').value,
+    max_clients: parseInt($('cfg_max_clients').value),
+    fail_threshold: parseInt($('cfg_fail_threshold').value),
+    timeout: parseInt($('cfg_timeout').value),
+    retries: parseInt($('cfg_retries').value),
+    threads: parseInt($('cfg_threads').value),
+    fetch_proxy: $('cfg_fetch_proxy').value.trim(),
+  };
+  $('saveCfg').disabled = true;
+  const d = await put('/config', cfg);
+  $('saveCfg').disabled = false;
+  if (d && !d.error) {
+    if (d._restart) toast('配置已保存，监听端口已重启');
+    else toast('配置已保存并生效');
+    // 若控制台端口改了，需要跳转
+    if (parseInt($('cfg_stats_port').value) !== CURRENT_STATS_PORT && d.stats_port) {
+      setTimeout(() => location.reload(), 1200);
+    }
+  } else if (d) toast(d.error || '保存失败', true);
+});
+
+$('clearLogs').addEventListener('click', () => { $('logs').innerHTML = ''; lastSeq = 0; });
+
+// ---- 渲染 ----
+// 代理数量组：抓取总数 → 存活总数 → 可用(池中) → 已熔断，层层递减
+const PROXY_FIELDS = [
+  ['socks_total', '抓取总数', ''],
+  ['alive_total', '存活总数', 'good'],
+  ['pool_size',   '可用(池中)', ''],
+  ['removed',     '已熔断', 'bad'],
+];
+// 运行统计组
+const RUN_FIELDS = [
+  ['requests','总请求',''], ['success','成功','good'], ['fail','失败','bad'],
+  ['circuit_open','熔断触发','bad'], ['reload','热加载',''], ['rotate','手动轮换',''],
+];
+
+function statCard(k, name, cls, d) {
+  return `<div class="stat"><div class="n ${cls}">${d[k] != null ? d[k] : '-'}</div><div class="t">${name}</div></div>`;
+}
+
+function refreshStats(d) {
+  if (d.listen) $('meta').textContent = d.listen + ':' + d.port + ' · 上游 ' + (d.upstream_type || '?');
+  if (d.mode) $('mode').value = d.mode;
+  // 地区筛选回填
+  if (d.region_filter !== undefined) {
+    $('regionFilter').value = d.region_filter || 'ALL';
+  }
+  const cur = $('current');
+  if (d.current) { cur.textContent = d.current; cur.className = 'current-ip'; }
+  else { cur.textContent = '(无)'; cur.className = 'current-ip none'; }
+  let cards = PROXY_FIELDS.map(([k, name, cls]) => statCard(k, name, cls, d));
+  cards = cards.concat(RUN_FIELDS.map(([k, name, cls]) => statCard(k, name, cls, d)));
+  // 地区统计卡片（来自 region_stats）
+  if (d.region_stats) {
+    const rs = d.region_stats;
+    cards.push(statCardRaw(rs.CN || 0, '中国 IP', 'good'));
+    cards.push(statCardRaw(rs.OTHER || 0, '其他 IP', 'bad'));
+  }
+  $('stats').innerHTML = cards.join('');
+}
+
+function statCardRaw(n, name, cls) {
+  return `<div class="stat"><div class="n ${cls}">${n}</div><div class="t">${name}</div></div>`;
+}
+
+function fillConfig(c) {
+  $('cfg_listen').value = c.listen || '127.0.0.1';
+  $('cfg_port').value = c.port || 8082;
+  $('cfg_stats_port').value = c.stats_port || 8083;
+  $('cfg_upstream_type').value = c.upstream_type || 'socks5';
+  $('cfg_max_clients').value = c.max_clients || 200;
+  $('cfg_fail_threshold').value = c.fail_threshold || 3;
+  $('cfg_timeout').value = c.timeout || 6;
+  $('cfg_retries').value = c.retries || 3;
+  $('cfg_threads').value = c.threads || 100;
+  $('cfg_fetch_proxy').value = c.fetch_proxy || '';
+}
+
+let CURRENT_STATS_PORT = location.port ? parseInt(location.port) : 8083;
+
+function renderTask(taskInfo, type, label) {
+  if (!taskInfo) return '';
+  const cls = taskInfo.running ? 'run' : (taskInfo.status === 'error' ? 'err' : (taskInfo.status === 'done' ? 'done' : ''));
+  let txt = label + ': ' + (taskInfo.running ? '运行中...' : taskInfo.status);
+  if (taskInfo.status === 'done' && taskInfo.result) txt += ' → ' + JSON.stringify(taskInfo.result);
+  return `<span class="task"><span class="dot ${cls}"></span>${txt}</span>`;
+}
+
+async function pollStats() {
+  try {
+    const r = await fetch('/stats');
+    const d = await r.json();
+    if (d && !d.error) refreshStats(d);
+  } catch (e) {}
+}
+
+async function pollTask() {
+  try {
+    const r = await fetch('/task');
+    const d = await r.json();
+    if (!d) return;
+    let html = '';
+    html += renderTask(d.fetch, 'fetch', '抓取');
+    if (d.fetch && (d.fetch.running || d.fetch.status === 'done' || d.fetch.status === 'error')) html += '  ·  ';
+    html += renderTask(d.check, 'check', '检测');
+    $('taskInfo').innerHTML = html;
+    // 检测/抓取完成时刷新配置显示（alive 可能变化）
+    if ((d.fetch && d.fetch.status === 'done') || (d.check && d.check.status === 'done')) {
+      pollStats();
+    }
+  } catch (e) {}
+}
+
+async function pollConfig() {
+  try {
+    const r = await fetch('/config');
+    const c = await r.json();
+    if (c && !c.error && !cfgLoaded) { fillConfig(c); cfgLoaded = true; }
+  } catch (e) {}
+}
+
+async function pollLogs() {
+  try {
+    const r = await fetch('/logs?since=' + lastSeq);
+    const d = await r.json();
+    if (!d || !d.logs || !d.logs.length) return;
+    const box = $('logs');
+    let maxSeq = lastSeq;
+    for (const l of d.logs) {
+      const div = document.createElement('div');
+      div.className = 'lvl-' + l.level;
+      div.innerHTML = `<span class="seq">#${l.seq}</span>${escapeHtml(l.msg)}`;
+      box.appendChild(div);
+      if (l.seq > maxSeq) maxSeq = l.seq;
+    }
+    lastSeq = maxSeq;
+    while (box.childNodes.length > 1000) box.removeChild(box.firstChild);
+    if ($('autoscroll').checked) box.scrollTop = box.scrollHeight;
+  } catch (e) {}
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---- 启动轮询 ----
+pollStats(); pollTask(); pollConfig(); pollLogs();
+setInterval(pollStats, 2000);
+setInterval(pollTask, 1500);
+setInterval(pollConfig, 5000);
+setInterval(pollLogs, 1500);
+</script>
+</body>
+</html>

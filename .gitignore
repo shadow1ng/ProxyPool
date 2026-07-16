@@ -1,0 +1,19 @@
+# 运行时数据（由 fetch/check 生成，不入库）
+socks.txt
+alive.txt
+region.json
+
+# 运行时配置（用户本地设置）
+config.json
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# 系统/编辑器
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

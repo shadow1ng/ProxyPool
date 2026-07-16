@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>代理池管理 - ProxyPool</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background: #0f1419; color: #c9d1d9; padding: 16px; min-height: 100vh; }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  .topbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+  .topbar h1 { font-size: 18px; color: #58a6ff; font-weight: 600; }
+  .topbar h1 small { color: #6e7681; font-weight: 400; font-size: 12px; margin-left: 6px; }
+  a.back { color: #8b949e; font-size: 13px; text-decoration: none; }
+  a.back:hover { color: #58a6ff; }
+
+  /* 概览卡片 */
+  .overview { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chip { background: #161b22; border: 1px solid #30363d; border-radius: 6px; padding: 10px 16px; text-align: center; min-width: 90px; }
+  .chip .n { font-size: 20px; font-weight: 700; font-family: monospace; }
+  .chip .t { font-size: 11px; color: #8b949e; margin-top: 2px; }
+  .n.cn { color: #3fb950; } .n.other { color: #d29922; } .n.unk { color: #6e7681; } .n.total { color: #58a6ff; }
+
+  /* 工具栏 */
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  input[type=text], select { background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 5px; padding: 6px 10px; font-size: 13px; }
+  input[type=text] { width: 220px; }
+  input:focus, select:focus { outline: none; border-color: #58a6ff; }
+  .btn { background: #238636; color: #fff; border: none; border-radius: 6px; padding: 6px 14px; font-size: 13px; cursor: pointer; font-weight: 500; }
+  .btn:hover { background: #2ea043; }
+  .btn.secondary { background: #30363d; }
+  .btn.secondary:hover { background: #3d444d; }
+  .btn.danger { background: #da3633; }
+  .btn.danger:hover { background: #f85149; }
+  .btn:disabled { background: #21262d; color: #6e7681; cursor: not-allowed; }
+
+  /* 表格 */
+  .table-wrap { background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead { background: #0d1117; position: sticky; top: 0; }
+  th { padding: 10px 14px; text-align: left; color: #8b949e; font-weight: 600; font-size: 12px; border-bottom: 1px solid #30363d; }
+  td { padding: 8px 14px; border-bottom: 1px solid #21262d; }
+  tr:hover { background: #1c2128; }
+  .proxy { font-family: "Cascadia Code", Consolas, monospace; color: #c9d1d9; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .badge.active { background: #1a4326; color: #3fb950; }
+  .badge.removed { background: #4a1e1e; color: #f85149; }
+  .badge.CN { background: #1f3a5f; color: #58a6ff; }
+  .badge.OTHER { background: #4a3a1e; color: #d29922; }
+  .badge.UNKNOWN { background: #2d333b; color: #6e7681; }
+  .scroll { max-height: 65vh; overflow-y: auto; }
+  .scroll::-webkit-scrollbar { width: 8px; }
+  .scroll::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+  .empty { padding: 40px; text-align: center; color: #6e7681; }
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(20px); background: #238636; color: #fff; padding: 9px 20px; border-radius: 6px; font-size: 13px; opacity: 0; transition: all .25s; pointer-events: none; z-index: 99; }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.err { background: #da3633; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>代理池管理 <small id="meta">—</small></h1>
+    <a class="back" href="/">← 返回控制台</a>
+  </div>
+
+  <!-- 概览 -->
+  <div class="overview" id="overview"></div>
+
+  <!-- 工具栏 -->
+  <div class="toolbar">
+    <select id="filterCountry">
+      <option value="">全部国家</option>
+      <option value="CN">仅中国</option>
+      <option value="OTHER">仅其他</option>
+      <option value="UNKNOWN">仅未知</option>
+    </select>
+    <select id="filterStatus">
+      <option value="">全部状态</option>
+      <option value="active">仅活跃</option>
+      <option value="removed">仅熔断</option>
+    </select>
+    <input type="text" id="search" placeholder="搜索 IP / 地区...">
+    <button class="btn secondary" id="refresh">🔄 刷新</button>
+    <span style="flex:1"></span>
+    <span id="countInfo" style="font-size:12px;color:#8b949e;"></span>
+  </div>
+
+  <!-- 表格 -->
+  <div class="table-wrap">
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>代理 (IP:端口)</th>
+            <th>地区</th>
+            <th>国家</th>
+            <th>状态</th>
+            <th>失败次数</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let allItems = [];
+
+let toastTimer;
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg; t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 2000);
+}
+
+async function loadPool() {
+  try {
+    const r = await fetch('/pool');
+    const d = await r.json();
+    if (!d) return;
+    allItems = d.items || [];
+    renderOverview(d);
+    renderTable();
+  } catch (e) { toast('加载失败: ' + e.message, true); }
+}
+
+function renderOverview(d) {
+  // 从 items 统计地区分布
+  let cn = 0, other = 0, unk = 0;
+  for (const it of allItems) {
+    if (it.country === 'CN') cn++;
+    else if (it.country === 'OTHER') other++;
+    else unk++;
+  }
+  $('overview').innerHTML = [
+    [d.socks_total != null ? d.socks_total : '-', '抓取总数', 'total'],
+    [d.alive_total != null ? d.alive_total : '-', '存活总数', 'good'],
+    [d.active, '可用(活跃)', 'total'],
+    [d.removed, '已熔断', 'unk'],
+    [cn, '中国', 'cn'],
+    [other, '其他', 'other'],
+    [unk, '未知', 'unk'],
+  ].map(([n, t, cls]) =>
+    `<div class="chip"><div class="n ${cls}">${n}</div><div class="t">${t}</div></div>`
+  ).join('');
+  $('meta').textContent = '存活 ' + (d.alive_total != null ? d.alive_total : '?') +
+                          ' / 抓取 ' + (d.socks_total != null ? d.socks_total : '?');
+}
+
+function renderTable() {
+  const fc = $('filterCountry').value;
+  const fs = $('filterStatus').value;
+  const kw = $('search').value.trim().toLowerCase();
+  const filtered = allItems.filter(it => {
+    if (fc && it.country !== fc) return false;
+    if (fs && it.status !== fs) return false;
+    if (kw && !(it.proxy.toLowerCase().includes(kw) || (it.region || '').toLowerCase().includes(kw))) return false;
+    return true;
+  });
+  $('countInfo').textContent = '显示 ' + filtered.length + ' / ' + allItems.length + ' 条';
+
+  if (!filtered.length) {
+    $('tbody').innerHTML = '<tr><td colspan="6" class="empty">无匹配代理</td></tr>';
+    return;
+  }
+  $('tbody').innerHTML = filtered.map(it => `
+    <tr>
+      <td class="proxy">${escapeHtml(it.proxy)}</td>
+      <td>${escapeHtml(it.region || '未知')}</td>
+      <td><span class="badge ${it.country}">${countryLabel(it.country)}</span></td>
+      <td><span class="badge ${it.status}">${it.status === 'active' ? '活跃' : '已熔断'}</span></td>
+      <td>${it.fails || 0}</td>
+      <td><button class="btn danger" style="padding:3px 10px;font-size:12px;" onclick="delProxy('${escapeAttr(it.proxy)}')">删除</button></td>
+    </tr>
+  `).join('');
+}
+
+function countryLabel(c) {
+  return {CN: '中国', OTHER: '其他', UNKNOWN: '未知'}[c] || c;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeAttr(s) {
+  return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
+async function delProxy(proxy) {
+  if (!confirm('确认删除代理 ' + proxy + ' ？')) return;
+  try {
+    const r = await fetch('/pool/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({proxy})
+    });
+    const d = await r.json();
+    if (d && !d.error) {
+      toast('已删除 ' + proxy);
+      loadPool();
+    } else { toast((d && d.error) || '删除失败', true); }
+  } catch (e) { toast('删除失败: ' + e.message, true); }
+}
+
+$('filterCountry').addEventListener('change', renderTable);
+$('filterStatus').addEventListener('change', renderTable);
+$('search').addEventListener('input', renderTable);
+$('refresh').addEventListener('click', loadPool);
+
+loadPool();
+setInterval(loadPool, 5000);
+</script>
+</body>
+</html>
